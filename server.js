@@ -1,4 +1,3 @@
-// ✅ Use 'import' instead of 'require' for ES Modules
 import express from 'express';
 import axios from 'axios';
 import 'dotenv/config';
@@ -6,17 +5,18 @@ import 'dotenv/config';
 const app = express();
 app.use(express.json());
 
-// Root route to check if server is alive
-app.get('/', (req, res) => res.send('Xber Proxy Server is running!'));
+// Root route for health checks
+app.get('/', (req, res) => res.send('Xber Proxy Server is live!'));
 
 app.post('/chat', async (req, res) => {
     const { messages, provider } = req.body;
-    console.log(`Incoming request. Provider: ${provider}`);
+    console.log(`Request received for provider: ${provider}`);
 
     try {
         if (provider === 'Gemini') {
+            // Check for Gemini Key
             if (!process.env.GEMINI_API_KEY) {
-                return res.status(500).json({ error: "Server missing GEMINI_API_KEY" });
+                return res.status(500).json({ error: "Missing GEMINI_API_KEY on server." });
             }
 
             const response = await axios.post(
@@ -29,18 +29,24 @@ app.post('/chat', async (req, res) => {
                 }
             );
             
-            const reply = response.data.candidates?.[0]?.content?.parts?.[0]?.text || "No response from Gemini";
+            const reply = response.data.candidates?.[0]?.content?.parts?.[0]?.text || "Gemini returned an empty response.";
             res.json({ reply });
 
         } else {
+            // Default to ChatGPT
             if (!process.env.OPENAI_API_KEY) {
-                return res.status(500).json({ error: "Server missing OPENAI_API_KEY" });
+                return res.status(500).json({ error: "Missing OPENAI_API_KEY on server." });
             }
 
             const response = await axios.post(
                 'https://api.openai.com/v1/chat/completions',
-                { model: "gpt-4o-mini", messages: messages },
-                { headers: { 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` } }
+                {
+                    model: "gpt-4o-mini",
+                    messages: messages
+                },
+                {
+                    headers: { 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` }
+                }
             );
 
             const reply = response.data.choices[0].message.content;
@@ -48,12 +54,11 @@ app.post('/chat', async (req, res) => {
         }
     } catch (error) {
         console.error("API Error:", error.response?.data || error.message);
-        res.status(500).json({ error: "The AI provider returned an error." });
+        res.status(500).json({ error: "The AI provider failed to respond." });
     }
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`✅ Server is live on port ${PORT}`);
-    console.log(`Active APIs: ${process.env.OPENAI_API_KEY ? 'OpenAI' : 'MISSING'} | ${process.env.GEMINI_API_KEY ? 'Gemini' : 'MISSING'}`);
+    console.log(`🚀 Server running on port ${PORT}`);
 });
