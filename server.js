@@ -5,22 +5,21 @@ import 'dotenv/config';
 const app = express();
 app.use(express.json());
 
-// Root route for health checks
-app.get('/', (req, res) => res.send('Xber Proxy Server is live!'));
+app.get('/', (req, res) => res.send('Server is active.'));
 
 app.post('/chat', async (req, res) => {
     const { messages, provider } = req.body;
-    console.log(`Request received for provider: ${provider}`);
+    console.log(`--- New Request ---`);
+    console.log(`Provider: ${provider}`);
 
     try {
         if (provider === 'Gemini') {
-            // Check for Gemini Key
-            if (!process.env.GEMINI_API_KEY) {
-                return res.status(500).json({ error: "Missing GEMINI_API_KEY on server." });
-            }
+            const apiKey = process.env.GEMINI_API_KEY;
+            if (!apiKey) throw new Error("GEMINI_API_KEY is missing.");
 
+            // ✅ Updated to v1 and ensured model name is correct
             const response = await axios.post(
-                `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+                `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
                 {
                     contents: messages.map(m => ({
                         role: m.role === 'user' ? 'user' : 'model',
@@ -29,14 +28,12 @@ app.post('/chat', async (req, res) => {
                 }
             );
             
-            const reply = response.data.candidates?.[0]?.content?.parts?.[0]?.text || "Gemini returned an empty response.";
+            const reply = response.data.candidates?.[0]?.content?.parts?.[0]?.text || "Gemini returned empty.";
             res.json({ reply });
 
         } else {
-            // Default to ChatGPT
-            if (!process.env.OPENAI_API_KEY) {
-                return res.status(500).json({ error: "Missing OPENAI_API_KEY on server." });
-            }
+            const apiKey = process.env.OPENAI_API_KEY;
+            if (!apiKey) throw new Error("OPENAI_API_KEY is missing.");
 
             const response = await axios.post(
                 'https://api.openai.com/v1/chat/completions',
@@ -45,7 +42,7 @@ app.post('/chat', async (req, res) => {
                     messages: messages
                 },
                 {
-                    headers: { 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` }
+                    headers: { 'Authorization': `Bearer ${apiKey}` }
                 }
             );
 
@@ -53,12 +50,15 @@ app.post('/chat', async (req, res) => {
             res.json({ reply });
         }
     } catch (error) {
-        console.error("API Error:", error.response?.data || error.message);
-        res.status(500).json({ error: "The AI provider failed to respond." });
+        const errorDetail = error.response?.data ? JSON.stringify(error.response.data) : error.message;
+        console.error("CRITICAL API ERROR:", errorDetail);
+        
+        res.status(500).json({ 
+            error: "The AI provider failed to respond.",
+            details: errorDetail 
+        });
     }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`🚀 Server running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`🚀 Server monitoring on port ${PORT}`));
