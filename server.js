@@ -5,60 +5,32 @@ import 'dotenv/config';
 const app = express();
 app.use(express.json());
 
-app.get('/', (req, res) => res.send('Server is active.'));
-
+// Chat Endpoint
 app.post('/chat', async (req, res) => {
     const { messages, provider } = req.body;
-    console.log(`--- New Request ---`);
-    console.log(`Provider: ${provider}`);
-
     try {
         if (provider === 'Gemini') {
-            const apiKey = process.env.GEMINI_API_KEY;
-            if (!apiKey) throw new Error("GEMINI_API_KEY is missing.");
-
-            // ✅ Updated to v1 and ensured model name is correct
             const response = await axios.post(
-                `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-                {
-                    contents: messages.map(m => ({
-                        role: m.role === 'user' ? 'user' : 'model',
-                        parts: [{ text: m.content }]
-                    }))
-                }
+                `https://generativelanguage.googleapis.com/v1/models/gemini-3-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+                { contents: messages.map(m => ({ role: m.role === 'user' ? 'user' : 'model', parts: [{ text: m.content }] })) }
             );
-            
-            const reply = response.data.candidates?.[0]?.content?.parts?.[0]?.text || "Gemini returned empty.";
-            res.json({ reply });
-
+            res.json({ reply: response.data.candidates[0].content.parts[0].text });
         } else {
-            const apiKey = process.env.OPENAI_API_KEY;
-            if (!apiKey) throw new Error("OPENAI_API_KEY is missing.");
-
             const response = await axios.post(
                 'https://api.openai.com/v1/chat/completions',
-                {
-                    model: "gpt-4o-mini",
-                    messages: messages
-                },
-                {
-                    headers: { 'Authorization': `Bearer ${apiKey}` }
-                }
+                { model: "gpt-4o-mini", messages: messages },
+                { headers: { 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` } }
             );
-
-            const reply = response.data.choices[0].message.content;
-            res.json({ reply });
+            res.json({ reply: response.data.choices[0].message.content });
         }
-    } catch (error) {
-        const errorDetail = error.response?.data ? JSON.stringify(error.response.data) : error.message;
-        console.error("CRITICAL API ERROR:", errorDetail);
-        
-        res.status(500).json({ 
-            error: "The AI provider failed to respond.",
-            details: errorDetail 
-        });
-    }
+    } catch (e) { res.status(500).json({ error: "API Failure" }); }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Server monitoring on port ${PORT}`));
+// Feedback Endpoint
+app.post('/feedback', (req, res) => {
+    console.log("FEEDBACK RECEIVED:", req.body);
+    // In a real app, save to a DB here
+    res.status(200).send("OK");
+});
+
+app.listen(process.env.PORT || 3000, () => console.log("Server running"));
