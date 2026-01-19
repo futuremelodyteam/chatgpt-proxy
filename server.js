@@ -1,57 +1,48 @@
-const express = require('express');
-const cors = require('cors');
-const bodyParser = require('body-parser');
+import express from 'express';
+import cors from 'cors';
+import bodyParser from 'body-parser';
+import dotenv from 'dotenv';
+import axios from 'axios';
+
+dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// MARK: - Middleware
-app.use(cors()); // Allows your iOS app to communicate with this server
+app.use(cors());
 app.use(bodyParser.json());
 
-// MARK: - Status Route
-// This fixes the "Cannot GET /status" error in your app
+// ✅ STATUS ROUTE (Fixes your "Offline" issue)
 app.get('/status', (req, res) => {
-    console.log("📡 Status check received");
-    res.status(200).json({
-        status: "online",
-        server: "Xber Proxy",
-        timestamp: new Date().toISOString()
-    });
+    res.status(200).json({ status: "online" });
 });
 
-// MARK: - Feedback Route
-// This receives the bug reports from your SettingsView
-app.post('/feedback', (req, res) => {
-    const feedback = req.body;
-    
-    // For now, we just log it to the Render console. 
-    // In the future, you can connect this to a database or email service.
-    console.log("📩 New Feedback Received:");
-    console.log(`From: ${feedback.nickname || 'Unknown'}`);
-    console.log(`Severity: ${feedback.severity}`);
-    console.log(`Message: ${feedback.message}`);
-    console.log(`Device: ${feedback.device} (OS: ${feedback.os})`);
-    
-    res.status(200).json({ message: "Feedback received successfully" });
-});
-
-// MARK: - AI Proxy Route (Example)
-// This is where your ChatView will eventually send messages
+// ✅ CHAT ROUTE (Fixes your "AI not responding" issue)
 app.post('/chat', async (req, res) => {
-    const { message, provider } = req.body;
-    console.log(`🤖 Chat request for ${provider}: ${message}`);
-    
-    // Logic for calling Gemini or OpenAI would go here
-    res.status(200).json({ reply: "Server received your message!" });
+    const { messages, provider } = req.body;
+    // Get the last message sent by the user
+    const userPrompt = messages[messages.length - 1].content;
+
+    try {
+        if (provider === "Gemini") {
+            const API_KEY = process.env.GEMINI_API_KEY;
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${API_KEY}`;
+            
+            const response = await axios.post(url, {
+                contents: [{ parts: [{ text: userPrompt }] }]
+            });
+
+            const aiReply = response.data.candidates[0].content.parts[0].text;
+            res.status(200).json({ reply: aiReply });
+        } else {
+            res.status(400).json({ error: "Only Gemini is supported right now" });
+        }
+    } catch (error) {
+        console.error("AI Error:", error.response?.data || error.message);
+        res.status(500).json({ error: "AI failed to respond" });
+    }
 });
 
-// MARK: - Root Route
-app.get('/', (req, res) => {
-    res.send('Xber Proxy Server is running. Use /status for health checks.');
-});
-
-// MARK: - Start Server
 app.listen(PORT, () => {
-    console.log(`🚀 Server is listening on port ${PORT}`);
+    console.log(`🚀 Server running on port ${PORT}`);
 });
