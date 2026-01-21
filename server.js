@@ -13,55 +13,51 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(bodyParser.json());
 
-// ✅ STATUS ROUTE: Used by your app to check if the server is awake
+// ✅ STATUS CHECK: Used by SettingsView
 app.get('/status', (req, res) => {
     res.status(200).json({ status: "online" });
 });
 
-// ✅ CHAT ROUTE: Handles the AI logic
+// ✅ CHAT LOGIC
 app.post('/chat', async (req, res) => {
     const { messages, provider } = req.body;
+    
+    // Case-insensitive check to prevent "Only Gemini supported" error
+    const selectedProvider = provider ? provider.toLowerCase() : "";
 
-    // Validation
-    if (!messages || messages.length === 0) {
-        return res.status(400).json({ error: "No messages provided" });
-    }
-
-    // Extract the latest user prompt
-    const userPrompt = messages[messages.length - 1].content;
-
-    try {
-        if (provider === "Gemini") {
+    if (selectedProvider === "gemini") {
+        try {
             const API_KEY = process.env.GEMINI_API_KEY;
             
-            // ✅ Updated Model Name: gemini-1.5-flash is stable and supported
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
+            // ✅ UPDATED FOR 2026: Gemini 3 Flash is the high-speed standard
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${API_KEY}`;
             
+            const userPrompt = messages[messages.length - 1].content;
+
             const response = await axios.post(url, {
-                contents: [{
-                    parts: [{ text: userPrompt }]
+                contents: [{ 
+                    parts: [{ text: userPrompt }] 
                 }]
             });
 
-            // Navigate the Google response object safely
+            // Extract the reply from Google's response structure
             const aiReply = response.data.candidates?.[0]?.content?.parts?.[0]?.text;
             
             if (aiReply) {
                 res.status(200).json({ reply: aiReply });
             } else {
-                throw new Error("Gemini returned an empty response structure.");
+                throw new Error("AI returned an empty content block.");
             }
-        } else {
-            res.status(400).json({ error: "Only Gemini is currently supported." });
+
+        } catch (error) {
+            // Logs detailed error messages to the Render Dashboard
+            console.error("❌ Google API Error:", error.response?.data || error.message);
+            
+            const errorMessage = error.response?.data?.error?.message || error.message;
+            res.status(500).json({ error: "AI failed to respond", details: errorMessage });
         }
-    } catch (error) {
-        // This logs the SPECIFIC error (like the 404 you saw) to your Render Dashboard
-        console.error("❌ Google API Error:", error.response?.data || error.message);
-        
-        res.status(500).json({ 
-            error: "AI failed to respond", 
-            details: error.response?.data?.error?.message || error.message 
-        });
+    } else {
+        res.status(400).json({ error: `Provider '${provider}' not recognized. Use 'Gemini'.` });
     }
 });
 
